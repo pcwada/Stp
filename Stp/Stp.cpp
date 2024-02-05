@@ -1,25 +1,39 @@
 ﻿#include <Windows.h>
+#include <gdiplus.h>
 #include <stdio.h>
+#include <iostream>
+
+#pragma comment(lib, "gdiplus.lib")
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 int main(int argc, char* argv[]) {
-    if (argc < 5) {
+
+    if (argc < 6) {
         printf("Screen Tap position Version 1.0\n");
         printf("            Created by Toshihiro Wada.\n");
         printf("Usage:");
-        printf("stp [target_area_left] [target_area_top] [target_area_right] [target_area_bottom]\n");
+        printf("stp [target_area_left] [target_area_top] [target_area_right] [target_area_bottom] [bmpfile]\n");
         printf("Sample:\n");
-        printf("%s 0 0 200 200\n", argv[0]);
+        printf("%s 0 0 200 200 c:\\temp\\keyboard.bmp", argv[0]);
         exit(-1);
     }
     int target_area_left = atoi(argv[1]);
     int target_area_top = atoi(argv[2]);
     int target_area_right = atoi(argv[3]);
     int target_area_bottom = atoi(argv[4]);
+    std::string imagePath = argv[5];
 
     const wchar_t CLASS_NAME[] = L"MyWindowClass";
-    const wchar_t WINDOW_NAME[] = L"My Window";
+    const wchar_t WINDOW_NAME[] = L"My Window with Background Image";
+
+    // GDI+ の初期化
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+    ULONG_PTR gdiplusToken;
+    Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, nullptr);
+
+    //const wchar_t CLASS_NAME[] = L"MyWindowClass";
+    //const wchar_t WINDOW_NAME[] = L"My Window";
 
     // ウィンドウクラスの登録
     WNDCLASS wc = {};
@@ -67,11 +81,51 @@ int main(int argc, char* argv[]) {
         DispatchMessage(&msg);
     }
 
+    // GDI + の終了
+    Gdiplus::GdiplusShutdown(gdiplusToken);
+
     return 0;
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    static Gdiplus::Bitmap* backgroundImage = nullptr;
     switch (uMsg) {
+    case WM_PAINT: {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+
+        // 画像ファイルのパスを指定
+        LPCWSTR imagePath = L"";
+        if (GetCommandLineW() != nullptr) {
+            int argc;
+            LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+            if (argc > 1) {
+                imagePath = argv[5];
+            }
+            LocalFree(argv);
+        }
+
+        //        LPCWSTR imagePath = L"C:\\Users\\1086881\\source\\repos\\ConsoleApplication3\\x64\\Debug\\EPARK1.bmp"; // 画像の実際のパスに変更してください
+
+                // 画像を描画
+        HBITMAP hBitmap = (HBITMAP)LoadImage(NULL, imagePath, IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+        if (hBitmap != NULL) {
+            HDC hdcMem = CreateCompatibleDC(hdc);
+            HBITMAP hOldBitmap = (HBITMAP)SelectObject(hdcMem, hBitmap);
+
+            BITMAP bitmap;
+            GetObject(hBitmap, sizeof(BITMAP), &bitmap);
+
+            BitBlt(hdc, 0, 0, bitmap.bmWidth, bitmap.bmHeight, hdcMem, 0, 0, SRCCOPY);
+
+            SelectObject(hdcMem, hOldBitmap);
+            DeleteDC(hdcMem);
+            DeleteObject(hBitmap);
+        }
+
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
     case WM_DESTROY:
         // ウィンドウが破棄されたらメッセージループを終了
         PostQuitMessage(0);
